@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.yupei</groupId>
+    <artifactId>chatProjects</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+
+    <properties>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <!-- Java WebSocket API -->
+        <dependency>
+            <groupId>javax.websocket</groupId>
+            <artifactId>javax.websocket-api</artifactId>
+            <version>1.1</version>
+        </dependency>
+
+        <!-- Tyrus Server 实现 WebSocket 的依赖 -->
+        <dependency>
+            <groupId>org.glassfish.tyrus</groupId>
+            <artifactId>tyrus-server</artifactId>
+            <version>1.17</version>
+        </dependency>
+
+        <!-- 需要一个Servlet容器依赖支持，如果用嵌入式Jetty可以加下面这个 -->
+        <dependency>
+            <groupId>org.glassfish.tyrus</groupId>
+            <artifactId>tyrus-container-grizzly-server</artifactId>
+            <version>1.17</version>
+        </dependency>
+    </dependencies>
+</project>
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天室</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        #onlineUsers {
+            border: 1px solid #ccc;
+            height: 100px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            padding: 10px;
+        }
+        #messages {
+            border: 1px solid #ccc;
+            height: 300px;
+            overflow-y: scroll;
+            margin-bottom: 10px;
+            padding: 10px;
+        }
+        #messages .system {
+            color: green;
+            font-style: italic;
+        }
+        #inputBox {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        #sendBtn {
+            padding: 10px 20px;
+        }
+        #instructions {
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+<h1>聊天室</h1>
+<div id="instructions">
+    <strong>使用说明：</strong><br>
+    - 修改用户名：发送 <code>SETNAME:您的新用户名</code><br>
+    - 发送私信：发送 <code>to用户名:消息内容</code><br>
+</div>
+<div>
+    <strong>在线用户：</strong>
+    <div id="onlineUsers"></div>
+</div>
+<div id="messages"></div>
+<input type="text" id="inputBox" placeholder="输入消息...">
+<button id="sendBtn">发送</button>
+
+<script>
+    let userName = prompt("请输入您的用户名", "");
+    if (!userName || userName.trim() === "") {
+        alert("用户名不能为空，将使用默认用户名");
+        userName = "游客" + Math.floor(Math.random() * 1000);
+    }
+    userName = userName.trim();
+
+    const ws = new WebSocket("ws://localhost:9000/chat");
+    const onlineUsers = document.getElementById('onlineUsers');
+    const messages = document.getElementById('messages');
+    const inputBox = document.getElementById('inputBox');
+    const sendBtn = document.getElementById('sendBtn');
+
+    ws.onopen = () => {
+        ws.send("SETNAME:" + userName);
+        console.log('已连接到服务器');
+    };
+
+    ws.onmessage = event => {
+        const data = event.data;
+
+        if (data.startsWith("__userlist__:")) {
+            const users = data
+                .substring("__userlist__:".length)
+                .split(",")
+                .filter(u => u);
+
+            users.sort((a, b) => {
+                const numA = parseInt(a.replace(/^用户/, ""), 10);
+                const numB = parseInt(b.replace(/^用户/, ""), 10);
+                return numA - numB;
+            });
+
+            onlineUsers.innerHTML = "";
+            users.forEach(u => {
+                const div = document.createElement('div');
+                div.textContent = u;
+                onlineUsers.appendChild(div);
+            });
+            return;
+        }
+
+        const div = document.createElement('div');
+        if (data.startsWith("系统：")) {
+            div.className = "system";
+        }
+        div.textContent = data;
+        messages.appendChild(div);
+        messages.scrollTop = messages.scrollHeight;
+    };
+
+    sendBtn.addEventListener('click', () => {
+        const msg = inputBox.value.trim();
+        if (msg) {
+            ws.send(msg);
+            inputBox.value = '';
+        }
+    });
+
+    inputBox.addEventListener('keydown', e => {
+        if (e.key === 'Enter') sendBtn.click();
+    });
+
+    ws.onerror = err => console.error('WebSocket 错误', err);
+    ws.onclose = () => console.log('连接已关闭');
+</script>
+</body>
+</html>
